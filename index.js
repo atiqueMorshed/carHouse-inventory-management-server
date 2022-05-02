@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { MongoClient, ServerApiVersion } from 'mongodb';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -25,6 +26,15 @@ const run = async () => {
     await client.connect();
     const inventoryCollection = client.db('carHouse').collection('inventory');
     console.log('DB CONNECTED.');
+
+    app.post('/api/login', (req, res) => {
+      const { email } = req.body;
+      const accessToken = jwt.sign({ email }, process.env.JWT_SECRET, {
+        expiresIn: '1d',
+      });
+
+      res.send({ accessToken });
+    });
   } finally {
   }
 };
