@@ -77,7 +77,11 @@ const run = async () => {
 
       let result;
       try {
-        result = await inventoryCollection.insertOne(carData);
+        result = await inventoryCollection.insertOne({
+          ...carData,
+          lastModified: new Date(),
+          sold: 0,
+        });
       } catch (error) {
         return res.status(400).send({ message: 'Insertion failed.' });
       }
