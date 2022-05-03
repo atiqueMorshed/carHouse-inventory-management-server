@@ -5,7 +5,7 @@ import { MongoClient, ServerApiVersion } from 'mongodb';
 import jwt from 'jsonwebtoken';
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT;
 const uri = `mongodb+srv://warehouse-management-admin:${[
   process.env.DB_PASSWORD,
 ]}@cluster0.uvu74.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
