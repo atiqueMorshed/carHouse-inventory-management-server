@@ -179,6 +179,8 @@ const run = async () => {
     app.post('/api/updateDelivery', validateJWT, async (req, res) => {
       //
       const id = req?.body?.postData;
+
+      // Checks if the objectId is valid.
       try {
         if (!ObjectId.isValid(id)) {
           return res
@@ -188,7 +190,6 @@ const run = async () => {
       } catch (error) {
         return res.status(406).send({ message: error.message });
       }
-      // Checks if the objectId is valid.
 
       // Checks if the quantity is greater than 0 in the DB.
       const query = { _id: ObjectId(id) };
@@ -205,6 +206,51 @@ const run = async () => {
       try {
         const result = await inventoryCollection.findOneAndUpdate(query, {
           $inc: { quantity: -1, sold: 1 },
+          $set: { lastModified: new Date() },
+        });
+        return res.status(200).send(result);
+      } catch (error) {
+        res.status(500).send({ message: error?.message });
+      }
+    });
+
+    // Updates quantity and sold cars
+    app.post('/api/updateStock', validateJWT, async (req, res) => {
+      const id = req?.body?.postData?.id;
+      let restockBy = req?.body?.postData?.restockBy;
+
+      if (!id || !restockBy) {
+        return res.status(406).send({ message: 'Invalid request.' });
+      }
+
+      // Checks if restock value is valid
+      if (isNaN(restockBy)) {
+        return res.status(406).send({ message: 'Valid number required.' });
+      }
+
+      restockBy = parseInt(restockBy);
+      if (restockBy <= 0) {
+        return res
+          .status(406)
+          .send({ message: 'Valid positive number required.' });
+      }
+
+      // Checks if the objectId is valid.
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(406)
+            .send({ message: 'The provided ID was invalid.' });
+        }
+      } catch (error) {
+        return res.status(406).send({ message: error.message });
+      }
+
+      // Updates the Inventory Car stock value
+      const query = { _id: ObjectId(id) };
+      try {
+        const result = await inventoryCollection.findOneAndUpdate(query, {
+          $inc: { quantity: restockBy },
           $set: { lastModified: new Date() },
         });
         return res.status(200).send(result);
