@@ -104,6 +104,21 @@ const run = async () => {
         return res.status(201).send({ ...result, sliderInsertionFailed: true });
       }
     });
+
+    // Gets slider data
+    app.get('/api/slider', async (req, res) => {
+      const query = {};
+      const cursor = sliderCollection.find(query);
+
+      try {
+        const sliders = await cursor.toArray();
+        res.status(200).send(sliders);
+      } catch (error) {
+        res
+          .status(503)
+          .send({ message: error?.message || 'Could not fetch data.' });
+      }
+    });
   } finally {
   }
 };
