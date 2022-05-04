@@ -108,15 +108,29 @@ const run = async () => {
     // Gets slider data
     app.get('/api/slider', async (req, res) => {
       const query = {};
-      const cursor = sliderCollection.find(query);
 
       try {
+        const cursor = sliderCollection.find(query);
         const sliders = await cursor.toArray();
         res.status(200).send(sliders);
       } catch (error) {
         res
           .status(503)
           .send({ message: error?.message || 'Could not fetch data.' });
+      }
+    });
+
+    // Gets car showcase data
+    app.get('/api/carShowcase', async (req, res) => {
+      const query = {};
+      try {
+        const cursor = inventoryCollection.find(query);
+        const carShowcase = await cursor.limit(6).toArray();
+        res.status(200).send(carShowcase);
+      } catch (error) {
+        res
+          .status(503)
+          .send({ message: error?.message || 'Could not fetch data' });
       }
     });
   } finally {
