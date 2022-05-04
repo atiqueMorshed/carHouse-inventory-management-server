@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 import jwt from 'jsonwebtoken';
 
 const app = express();
@@ -14,13 +14,27 @@ const uri = `mongodb+srv://warehouse-management-admin:${[
 app.use(express.json());
 app.use(cors());
 
-const validateJWT = (req, res, next) => {
-  const token = req?.headers?.authorization.split(' ')[1];
+app.use((err, req, res, next) => {
+  // Checks if the incoming req.body is valid json
+  if (err.status === 400)
+    return res.status(err.status).send('Invalid JSON Object');
 
-  if (!token) return res.status(401).send({ message: 'Unauthorized Access' });
+  return next(err);
+});
+
+const validateJWT = (req, res, next) => {
+  const token = req?.headers?.authorization?.split(' ')[1];
+
+  if (!token)
+    return res
+      .status(401)
+      .send({ message: 'Unauthorized Access (Invalid JWT)' });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).send({ message: 'Forbidden Access!' });
+    if (err)
+      return res
+        .status(403)
+        .send({ message: 'Forbidden Access! (Invalid JWT)' });
     if (decoded) {
       req.decoded = decoded;
       next();
@@ -74,9 +88,16 @@ const run = async () => {
       ) {
         return res.status(400).send({ message: 'Insufficient form data.' });
       }
+      if (isNaN(carData.price) || isNaN(carData.quantity)) {
+        return res
+          .status(406)
+          .send({ message: 'Price and quantity must me numeric.' });
+      }
 
       let result;
       try {
+        carData.quantity = +carData.quantity;
+        carData.price = +carData.price;
         result = await inventoryCollection.insertOne({
           ...carData,
           lastModified: new Date(),
@@ -131,6 +152,64 @@ const run = async () => {
         res
           .status(503)
           .send({ message: error?.message || 'Could not fetch data' });
+      }
+    });
+
+    // Gets inventory car information
+    app.get('/api/inventory/:id', async (req, res) => {
+      const { id } = req.params;
+      if (!id)
+        return res.status(406).send({ message: 'Car ID cannot be empty.' });
+
+      if (!ObjectId.isValid(id))
+        return res
+          .status(404)
+          .send({ message: 'The provided ID was invalid.' });
+
+      try {
+        const query = { _id: ObjectId(id) };
+        const inventoryCar = await inventoryCollection.findOne(query);
+        res.status(200).send(inventoryCar);
+      } catch (error) {
+        return res.status(406).send({ message: 'Incorrect car ID.' });
+      }
+    });
+
+    // Updates quantity and sold cars
+    app.post('/api/updateDelivery', validateJWT, async (req, res) => {
+      //
+      const id = req?.body?.postData;
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(406)
+            .send({ message: 'The provided ID was invalid.' });
+        }
+      } catch (error) {
+        return res.status(406).send({ message: error.message });
+      }
+      // Checks if the objectId is valid.
+
+      // Checks if the quantity is greater than 0 in the DB.
+      const query = { _id: ObjectId(id) };
+      try {
+        const inventoryCar = await inventoryCollection.findOne(query);
+        if (inventoryCar?.quantity <= 0) {
+          return res.status(403).send({ message: 'The car is not available.' });
+        }
+      } catch (error) {
+        return res.status(503).send({ message: error?.message });
+      }
+
+      // Updates the Inventory Car
+      try {
+        const result = await inventoryCollection.findOneAndUpdate(query, {
+          $inc: { quantity: -1, sold: 1 },
+          $set: { lastModified: new Date() },
+        });
+        return res.status(200).send(result);
+      } catch (error) {
+        res.status(500).send({ message: error?.message });
       }
     });
   } finally {
