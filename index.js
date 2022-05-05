@@ -146,12 +146,51 @@ const run = async () => {
       const query = {};
       try {
         const cursor = inventoryCollection.find(query);
+
         const carShowcase = await cursor.limit(6).toArray();
         res.status(200).send(carShowcase);
       } catch (error) {
         res
           .status(503)
           .send({ message: error?.message || 'Could not fetch data' });
+      }
+    });
+
+    // Get all inventory cars
+    app.get('/api/inventory', validateJWT, async (req, res) => {
+      let page = req?.query?.page;
+      let count = req?.query?.count;
+
+      // For any invalid queries, the website resets to first page and 10 cars
+      try {
+        if (isNaN(page) || isNaN(count)) {
+          page = 0;
+          count = 10;
+        }
+        page = parseInt(page);
+        count = parseInt(count);
+      } catch (error) {
+        page = 0;
+        count = 10;
+      }
+      // Gets inventory data
+      let inventory;
+      const query = {};
+      try {
+        const cursor = inventoryCollection.find(query);
+        inventory = await cursor
+          .skip(page * count)
+          .limit(count)
+          .toArray();
+
+        if (inventory) {
+          return res.status(200).send(inventory);
+        } else {
+          inventory = await cursor.toArray();
+          return res.status(200).send(inventory);
+        }
+      } catch (error) {
+        res.status(404).send({ message: error?.message });
       }
     });
 
@@ -169,9 +208,73 @@ const run = async () => {
       try {
         const query = { _id: ObjectId(id) };
         const inventoryCar = await inventoryCollection.findOne(query);
-        res.status(200).send(inventoryCar);
+        return res.status(200).send(inventoryCar);
       } catch (error) {
         return res.status(406).send({ message: 'Incorrect car ID.' });
+      }
+    });
+
+    // Deletes an inventory with its ID
+    app.delete('/api/inventory', validateJWT, async (req, res) => {
+      let id = req?.body?.id;
+      if (!id) {
+        return res
+          .status(406)
+          .send({ message: 'Cannot complete request without car ID.' });
+      }
+      if (!ObjectId.isValid(id)) {
+        return res.status(406).send({ message: 'Invalid car ID.' });
+      }
+
+      // Now we have valid car ID
+      // Performs atomic delete operation from both inventory and slider documents.
+
+      const transactionOptions = {
+        readConcern: { level: 'snapshot' },
+        writeConcern: { w: 'majority' },
+        readPreference: 'primary',
+        readPreference: 'primary',
+      };
+
+      const session = client.startSession();
+      try {
+        session.startTransaction(transactionOptions);
+        let query = { carId: ObjectId(id) };
+        const sliderDeleteResult = await sliderCollection.deleteOne(query, {
+          session,
+        });
+        if (!sliderDeleteResult) throw new Error('Deletion failed (s).');
+        if (
+          !(
+            sliderDeleteResult?.deletedCount === 0 ||
+            sliderDeleteResult?.deletedCount === 1
+          )
+        ) {
+          throw new Error('Deletion failed (s)..');
+        }
+
+        query = { _id: ObjectId(id) };
+        const inventoryDeleteResult = await inventoryCollection.deleteOne(
+          query,
+          { session }
+        );
+        if (!inventoryDeleteResult) throw new Error('Deletion failed (i).');
+
+        if (inventoryDeleteResult?.deletedCount !== 1) {
+          await session.endSession();
+          return res
+            .status(404)
+            .send({ message: 'Inventory car unavailable.' });
+        }
+
+        await session.commitTransaction();
+        await session.endSession();
+        return res.status(200).send({ message: 'Deletion successful.' });
+      } catch (error) {
+        await session.abortTransaction();
+        await session.endSession();
+        return res.status(500).send({ message: error?.message });
+      } finally {
       }
     });
 
@@ -210,7 +313,7 @@ const run = async () => {
         });
         return res.status(200).send(result);
       } catch (error) {
-        res.status(500).send({ message: error?.message });
+        return res.status(500).send({ message: error?.message });
       }
     });
 
