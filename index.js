@@ -42,6 +42,20 @@ const validateJWT = (req, res, next) => {
   });
 };
 
+const validateUserWithJWT = (req, res, next) => {
+  const decodedUid = req?.decoded?.uid;
+  let uid = req.body?.uid;
+  if (!uid) uid = req?.query?.uid;
+
+  if (!decodedUid || decodedUid !== uid) {
+    return res
+      .status(403)
+      .send({ message: 'Forbidden Access. (Not User JWT)' });
+  }
+
+  next();
+};
+
 // Mongo API
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
@@ -156,31 +170,59 @@ const run = async () => {
       }
     });
 
+    // Gets the latest modified cars
+    app.get('/api/latestCars', async (req, res) => {
+      const query = {};
+      try {
+        const cursor = inventoryCollection
+          .find({})
+          .sort({ lastModified: -1 })
+          .limit(6);
+        const latestCars = await cursor.toArray();
+        return res.status(200).send(latestCars);
+      } catch (error) {
+        return res.status(500).send(error.message);
+      }
+    });
+
+    // Gets total car count
+    app.get('/api/carcount', async (req, res) => {
+      try {
+        const count = await inventoryCollection.countDocuments();
+        return res.status(200).json(count);
+      } catch (error) {
+        return res
+          .status(503)
+          .send({ message: error?.message || 'Could not fetch data' });
+      }
+    });
+
     // Get all inventory cars
     app.get('/api/inventory', validateJWT, async (req, res) => {
       let page = req?.query?.page;
-      let count = req?.query?.count;
+      let size = req?.query?.size;
 
       // For any invalid queries, the website resets to first page and 10 cars
       try {
-        if (isNaN(page) || isNaN(count)) {
-          page = 0;
-          count = 10;
-        }
         page = parseInt(page);
-        count = parseInt(count);
+        size = parseInt(size);
+
+        if (page < 0) {
+          page = 0;
+        }
       } catch (error) {
         page = 0;
-        count = 10;
+        size = 10;
       }
+
       // Gets inventory data
       let inventory;
       const query = {};
       try {
         const cursor = inventoryCollection.find(query);
         inventory = await cursor
-          .skip(page * count)
-          .limit(count)
+          .skip(page * size)
+          .limit(size)
           .toArray();
 
         if (inventory) {
@@ -193,6 +235,37 @@ const run = async () => {
         res.status(404).send({ message: error?.message });
       }
     });
+
+    app.get(
+      '/api/userInventory',
+      validateJWT,
+      validateUserWithJWT,
+      async (req, res) => {
+        const uid = req?.query?.uid;
+        if (!uid) {
+          return res
+            .status(401)
+            .send({ message: 'Unauthorized. (UID not found)' });
+        }
+        // const decodedUid = req?.decoded?.uid;
+        // if (!decodedUid || decodedUid !== uid) {
+        //   return res
+        //     .status(403)
+        //     .send({ message: 'Forbidden Access. (Wrong User JWT)' });
+        // }
+        // User is valid
+        const query = { 'supplier.uid': uid };
+        // Finds user inventory
+        try {
+          const cursor = inventoryCollection.find(query);
+          const userInventory = await cursor.toArray();
+          console.log(userInventory);
+          return res.status(200).send(userInventory);
+        } catch (error) {
+          return res.status(500).send({ message: error?.message });
+        }
+      }
+    );
 
     // Gets inventory car information
     app.get('/api/inventory/:id', async (req, res) => {
