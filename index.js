@@ -143,10 +143,18 @@ const run = async () => {
     // Gets slider data
     app.get('/api/slider', async (req, res) => {
       const query = {};
+      const projection = {
+        _id: 0,
+        carName: 1,
+        carId: 1,
+        imageURL: 1,
+        'supplier.name': 1,
+      };
 
       try {
-        const cursor = sliderCollection.find(query);
+        const cursor = sliderCollection.find(query).project(projection);
         const sliders = await cursor.toArray();
+
         res.status(200).send(sliders);
       } catch (error) {
         res
@@ -158,8 +166,16 @@ const run = async () => {
     // Gets car showcase data
     app.get('/api/carShowcase', async (req, res) => {
       const query = {};
+      const projection = {
+        carName: 1,
+        price: 1,
+        quantity: 1,
+        description: 1,
+        imageURL: 1,
+        'supplier.name': 1,
+      };
       try {
-        const cursor = inventoryCollection.find(query);
+        const cursor = inventoryCollection.find(query).project(projection);
 
         const carShowcase = await cursor.limit(6).toArray();
         res.status(200).send(carShowcase);
@@ -173,9 +189,11 @@ const run = async () => {
     // Gets the latest modified cars
     app.get('/api/latestCars', async (req, res) => {
       const query = {};
+      const projection = { carName: 1, lastModified: 1, imageURL: 1 };
       try {
         const cursor = inventoryCollection
           .find({})
+          .project(projection)
           .sort({ lastModified: -1 })
           .limit(6);
         const latestCars = await cursor.toArray();
@@ -259,7 +277,6 @@ const run = async () => {
         try {
           const cursor = inventoryCollection.find(query);
           const userInventory = await cursor.toArray();
-          console.log(userInventory);
           return res.status(200).send(userInventory);
         } catch (error) {
           return res.status(500).send({ message: error?.message });
@@ -284,6 +301,19 @@ const run = async () => {
         return res.status(200).send(inventoryCar);
       } catch (error) {
         return res.status(406).send({ message: 'Incorrect car ID.' });
+      }
+    });
+
+    // Gets carName and sold information
+    app.get('/api/getCarNameSold', async (req, res) => {
+      const query = {};
+      const projection = { carName: 1, sold: 1 };
+      try {
+        const cursor = inventoryCollection.find({}).project(projection);
+        const cars = await cursor.toArray();
+        return res.status(200).send(cars);
+      } catch (error) {
+        return res.status(500).send({ message: error?.message });
       }
     });
 
@@ -351,8 +381,8 @@ const run = async () => {
       }
     });
 
-    // Updates quantity and sold cars
-    app.post('/api/updateDelivery', validateJWT, async (req, res) => {
+    // Updates quantity and sold cars when delivered is clicked
+    app.put('/api/updateDelivery', validateJWT, async (req, res) => {
       //
       const id = req?.body?.postData;
 
@@ -390,8 +420,8 @@ const run = async () => {
       }
     });
 
-    // Updates quantity and sold cars
-    app.post('/api/updateStock', validateJWT, async (req, res) => {
+    // Updates stock (restock by)
+    app.put('/api/updateStock', validateJWT, async (req, res) => {
       const id = req?.body?.postData?.id;
       let restockBy = req?.body?.postData?.restockBy;
 
