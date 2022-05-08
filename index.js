@@ -309,7 +309,10 @@ const run = async () => {
       const query = {};
       const projection = { carName: 1, sold: 1 };
       try {
-        const cursor = inventoryCollection.find({}).project(projection);
+        const cursor = inventoryCollection
+          .find({})
+          .project(projection)
+          .sort({ sold: -1 });
         const cars = await cursor.toArray();
         return res.status(200).send(cars);
       } catch (error) {
